@@ -1,0 +1,8 @@
+data/raw/
+.env
+*.pbix
+*.twbx
+__pycache__/
+venv/
+.DS_Store
+*.pyc
