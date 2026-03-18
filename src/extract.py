@@ -1,104 +1,177 @@
 """
-extract.py
-----------
-Handles extraction of raw CSV files from the data/raw/ directory.
-Returns a dictionary of DataFrames ready for transformation.
+extract.py — Data Extraction Module
+E-Commerce Data Pipeline Project
+
+Reads raw CSVs from data/raw/, validates them, adds metadata,
+and returns a dictionary of DataFrames ready for transformation.
 """
 
 import os
 import logging
+import pandas as pd
 from datetime import datetime
 
-import pandas as pd
-
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s"
+)
 logger = logging.getLogger(__name__)
 
-# File map: logical name -> filename in data/raw/
-RAW_FILES = {
-    "orders":         "olist_orders_dataset.csv",
-    "order_items":    "olist_order_items_dataset.csv",
-    "customers":      "olist_customers_dataset.csv",
-    "products":       "olist_products_dataset.csv",
-    "sellers":        "olist_sellers_dataset.csv",
-    "payments":       "olist_order_payments_dataset.csv",
-    "reviews":        "olist_order_reviews_dataset.csv",
-    "geolocation":    "olist_geolocation_dataset.csv",
+# Expected row counts for validation (update after first run)
+EXPECTED_ROW_COUNTS = {
+    "orders": 99441,
+    "order_items": 112650,
+    "customers": 99441,
+    "products": 32951,
+    "sellers": 3095,
+    "payments": 103886,
+    "reviews": 100000,
+    "geolocation": 1000163,
 }
 
-# Expected minimum row counts for validation warnings
-MIN_ROW_COUNTS = {
-    "orders":       90_000,
-    "order_items":  100_000,
-    "customers":    90_000,
-    "products":     30_000,
-    "sellers":      3_000,
-    "payments":     100_000,
-    "reviews":      90_000,
-    "geolocation":  1_000_000,
+RAW_DATA_PATH = "data/raw"
+
+FILE_MAP = {
+    "orders": "olist_orders_dataset.csv",
+    "order_items": "olist_order_items_dataset.csv",
+    "customers": "olist_customers_dataset.csv",
+    "products": "olist_products_dataset.csv",
+    "sellers": "olist_sellers_dataset.csv",
+    "payments": "olist_order_payments_dataset.csv",
+    "reviews": "olist_order_reviews_dataset.csv",
+    "geolocation": "olist_geolocation_dataset.csv",
+}
+
+DTYPE_MAP = {
+    "orders": {
+        "order_id": str,
+        "customer_id": str,
+        "order_status": str,
+    },
+    "order_items": {
+        "order_id": str,
+        "product_id": str,
+        "seller_id": str,
+        "order_item_id": int,
+        "price": float,
+        "freight_value": float,
+    },
+    "customers": {
+        "customer_id": str,
+        "customer_unique_id": str,
+        "customer_zip_code_prefix": str,
+        "customer_city": str,
+        "customer_state": str,
+    },
+    "products": {
+        "product_id": str,
+        "product_category_name": str,
+    },
+    "sellers": {
+        "seller_id": str,
+        "seller_zip_code_prefix": str,
+        "seller_city": str,
+        "seller_state": str,
+    },
+    "payments": {
+        "order_id": str,
+        "payment_sequential": int,
+        "payment_type": str,
+        "payment_installments": int,
+        "payment_value": float,
+    },
+    "reviews": {
+        "review_id": str,
+        "order_id": str,
+        "review_score": float,
+    },
+    "geolocation": {
+        "geolocation_zip_code_prefix": str,
+        "geolocation_city": str,
+        "geolocation_state": str,
+        "geolocation_lat": float,
+        "geolocation_lng": float,
+    },
+}
+
+DATE_COLUMNS = {
+    "orders": [
+        "order_purchase_timestamp",
+        "order_approved_at",
+        "order_delivered_carrier_date",
+        "order_delivered_customer_date",
+        "order_estimated_delivery_date",
+    ],
+    "reviews": ["review_creation_date", "review_answer_timestamp"],
+    "order_items": ["shipping_limit_date"],
 }
 
 
-def extract(raw_dir: str = "data/raw") -> dict:
-    """
-    Read all raw CSV files and return a dictionary of DataFrames.
+def read_csv(name: str, filename: str) -> pd.DataFrame:
+    """Read a single CSV file with enforced dtypes and date parsing."""
+    filepath = os.path.join(RAW_DATA_PATH, filename)
 
-    Args:
-        raw_dir: Path to the folder containing raw CSV files.
+    if not os.path.exists(filepath):
+        logger.error(f"File not found: {filepath}")
+        raise FileNotFoundError(f"Missing file: {filepath}")
 
-    Returns:
-        dict mapping logical name to DataFrame, e.g. {"orders": df, ...}
+    logger.info(f"Reading {name} from {filepath}...")
+
+    df = pd.read_csv(
+        filepath,
+        dtype=DTYPE_MAP.get(name, {}),
+        parse_dates=DATE_COLUMNS.get(name, []),
+        low_memory=False,
+    )
+
+    # Add metadata columns
+    df["_source_file"] = filename
+    df["_ingestion_timestamp"] = datetime.utcnow()
+
+    logger.info(f"  -> {len(df):,} rows loaded")
+    return df
+
+
+def validate_row_counts(dataframes: dict) -> None:
+    """Warn if row counts differ significantly from expected values."""
+    for name, expected in EXPECTED_ROW_COUNTS.items():
+        if name not in dataframes:
+            continue
+        actual = len(dataframes[name])
+        if actual != expected:
+            logger.warning(
+                f"Row count mismatch for '{name}': "
+                f"expected {expected:,}, got {actual:,}"
+            )
+        else:
+            logger.info(f"  OK {name}: {actual:,} rows (as expected)")
+
+
+def extract() -> dict:
     """
-    ingestion_ts = datetime.utcnow().isoformat()
+    Main extraction function.
+    Returns a dictionary of DataFrames keyed by dataset name.
+    """
+    logger.info("=" * 50)
+    logger.info("EXTRACT PHASE STARTING")
+    logger.info("=" * 50)
+
     dataframes = {}
 
-    for name, filename in RAW_FILES.items():
-        filepath = os.path.join(raw_dir, filename)
+    for name, filename in FILE_MAP.items():
+        try:
+            dataframes[name] = read_csv(name, filename)
+        except FileNotFoundError:
+            logger.warning(f"Skipping '{name}' - file not found.")
 
-        if not os.path.exists(filepath):
-            logger.warning(f"[EXTRACT] File not found, skipping: {filepath}")
-            continue
+    logger.info(f"\nExtraction complete. {len(dataframes)} datasets loaded.")
+    validate_row_counts(dataframes)
 
-        logger.info(f"[EXTRACT] Reading {filename} ...")
-        df = _read_csv(name, filepath)
-
-        # Add metadata columns
-        df["_source_file"] = filename
-        df["_ingestion_timestamp"] = ingestion_ts
-
-        _validate_row_count(name, df)
-
-        dataframes[name] = df
-        logger.info(f"[EXTRACT] {name}: {len(df):,} rows loaded")
-
-    logger.info(f"[EXTRACT] Done — {len(dataframes)} files extracted")
     return dataframes
 
 
-def _read_csv(name: str, filepath: str) -> pd.DataFrame:
-    """Read a CSV with date parsing applied per dataset."""
-    date_cols = {
-        "orders": [
-            "order_purchase_timestamp",
-            "order_approved_at",
-            "order_delivered_carrier_date",
-            "order_delivered_customer_date",
-            "order_estimated_delivery_date",
-        ],
-        "reviews": ["review_creation_date", "review_answer_timestamp"],
-    }
-
-    kwargs = {"low_memory": False}
-    if name in date_cols:
-        kwargs["parse_dates"] = date_cols[name]
-
-    return pd.read_csv(filepath, **kwargs)
-
-
-def _validate_row_count(name: str, df: pd.DataFrame) -> None:
-    """Warn if row count is below the expected minimum."""
-    minimum = MIN_ROW_COUNTS.get(name, 0)
-    if len(df) < minimum:
-        logger.warning(
-            f"[EXTRACT] {name} has {len(df):,} rows — "
-            f"expected at least {minimum:,}. Check the source file."
-        )
+if __name__ == "__main__":
+    dfs = extract()
+    for name, df in dfs.items():
+        print(f"{name}: {df.shape}")

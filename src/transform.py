@@ -1,8 +1,10 @@
 """
-transform.py
-------------
-All cleaning and enrichment logic for the e-commerce pipeline.
-Each function takes a DataFrame in and returns a DataFrame out — no side effects.
+transform.py — Data Transformation Module
+E-Commerce Data Pipeline Project
+
+Contains individual transformation functions for each dataset.
+Each function takes a DataFrame in and returns a cleaned DataFrame out.
+No side effects — easy to test in isolation.
 """
 
 import logging
@@ -11,182 +13,291 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
+# Portuguese -> English category name mapping (top categories)
 CATEGORY_TRANSLATION = {
-    "cama_mesa_banho":            "bed_bath_table",
-    "beleza_saude":               "health_beauty",
-    "esporte_lazer":              "sports_leisure",
-    "moveis_decoracao":           "furniture_decor",
-    "informatica_acessorios":     "computers_accessories",
-    "utilidades_domesticas":      "housewares",
-    "relogios_presentes":         "watches_gifts",
-    "telefonia":                  "telephony",
-    "ferramentas_jardim":         "garden_tools",
-    "automotivo":                 "auto",
-    "brinquedos":                 "toys",
-    "perfumaria":                 "perfumery",
-    "bebes":                      "baby",
-    "eletronicos":                "electronics",
-    "eletrodomesticos":           "appliances",
-    "livros_tecnicos":            "technical_books",
-    "musica":                     "music",
-    "papelaria":                  "stationery",
+    "cama_mesa_banho": "bed_bath_table",
+    "beleza_saude": "health_beauty",
+    "esporte_lazer": "sports_leisure",
+    "informatica_acessorios": "computers_accessories",
+    "moveis_decoracao": "furniture_decor",
+    "utilidades_domesticas": "housewares",
+    "relogios_presentes": "watches_gifts",
+    "telefonia": "telephony",
+    "automotivo": "auto",
+    "brinquedos": "toys",
+    "cool_stuff": "cool_stuff",
+    "ferramentas_jardim": "garden_tools",
+    "perfumaria": "perfumery",
+    "bebes": "baby",
+    "eletronicos": "electronics",
+    "eletrodomesticos": "appliances",
+    "livros_tecnicos": "books_technical",
+    "fashion_bolsas_e_acessorios": "fashion_bags_accessories",
+    "papelaria": "stationery",
+    "construcao_ferramentas_seguranca": "construction_tools_safety",
 }
 
 
 def clean_orders(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Clean orders:
+    Clean the orders dataset.
     - Drop rows with null order_id
-    - Standardise order_status to lowercase
-    - Ensure all timestamp columns are datetime
+    - Standardize order_status values
+    - Parse and validate date columns
     """
-    logger.info("[TRANSFORM] clean_orders start — rows: {:,}".format(len(df)))
-    df = df.copy()
+    logger.info("Cleaning orders...")
+    original_count = len(df)
 
-    before = len(df)
+    # Drop rows without order_id
     df = df.dropna(subset=["order_id"])
-    logger.info(f"[TRANSFORM] clean_orders: dropped {before - len(df):,} null order_id rows")
 
+    # Standardize status to lowercase stripped strings
     df["order_status"] = df["order_status"].str.strip().str.lower()
 
-    date_cols = [
-        "order_purchase_timestamp",
-        "order_approved_at",
-        "order_delivered_carrier_date",
-        "order_delivered_customer_date",
-        "order_estimated_delivery_date",
-    ]
-    for col in date_cols:
-        if col in df.columns:
-            df[col] = pd.to_datetime(df[col], errors="coerce")
+    # Valid statuses
+    valid_statuses = {
+        "delivered", "shipped", "canceled", "unavailable",
+        "invoiced", "processing", "created", "approved"
+    }
+    invalid_mask = ~df["order_status"].isin(valid_statuses)
+    if invalid_mask.sum() > 0:
+        logger.warning(f"  Found {invalid_mask.sum()} rows with unexpected order_status values")
 
-    logger.info("[TRANSFORM] clean_orders done — rows: {:,}".format(len(df)))
-    return df
+    logger.info(f"  Orders: {original_count:,} -> {len(df):,} rows after cleaning")
+    return df.reset_index(drop=True)
 
 
 def clean_customers(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Clean customers:
-    - Normalise city names (strip, title case)
-    - Remove duplicate customer_ids
+    Clean the customers dataset.
+    - Normalize city names (strip whitespace, title case)
+    - Remove duplicate customer records
     """
-    logger.info("[TRANSFORM] clean_customers start — rows: {:,}".format(len(df)))
-    df = df.copy()
+    logger.info("Cleaning customers...")
+    original_count = len(df)
 
-    if "customer_city" in df.columns:
-        df["customer_city"] = df["customer_city"].str.strip().str.title()
-    if "customer_state" in df.columns:
-        df["customer_state"] = df["customer_state"].str.strip().str.upper()
+    # Normalize city names
+    df["customer_city"] = (
+        df["customer_city"]
+        .str.strip()
+        .str.title()
+    )
 
-    before = len(df)
+    # Normalize state to uppercase
+    df["customer_state"] = df["customer_state"].str.strip().str.upper()
+
+    # Remove duplicates on customer_id
     df = df.drop_duplicates(subset=["customer_id"])
-    logger.info(f"[TRANSFORM] clean_customers: removed {before - len(df):,} duplicates")
 
-    logger.info("[TRANSFORM] clean_customers done — rows: {:,}".format(len(df)))
-    return df
+    logger.info(f"  Customers: {original_count:,} -> {len(df):,} rows after cleaning")
+    return df.reset_index(drop=True)
 
 
 def clean_products(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Clean products:
+    Clean the products dataset.
     - Fill missing category names with 'unknown'
     - Translate Portuguese category names to English
     """
-    logger.info("[TRANSFORM] clean_products start — rows: {:,}".format(len(df)))
-    df = df.copy()
+    logger.info("Cleaning products...")
 
-    if "product_category_name" in df.columns:
-        df["product_category_name"] = df["product_category_name"].fillna("unknown")
-        df["product_category_name_english"] = (
-            df["product_category_name"]
-            .map(CATEGORY_TRANSLATION)
-            .fillna(df["product_category_name"])
-        )
+    # Fill missing category names
+    df["product_category_name"] = df["product_category_name"].fillna("unknown")
 
-    logger.info("[TRANSFORM] clean_products done — rows: {:,}".format(len(df)))
-    return df
+    # Translate category names
+    df["product_category_name_english"] = (
+        df["product_category_name"]
+        .map(CATEGORY_TRANSLATION)
+        .fillna(df["product_category_name"])  # keep original if no translation found
+    )
+
+    logger.info(f"  Products: {len(df):,} rows cleaned")
+    return df.reset_index(drop=True)
+
+
+def clean_sellers(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Clean the sellers dataset.
+    - Normalize city and state values
+    """
+    logger.info("Cleaning sellers...")
+
+    df["seller_city"] = df["seller_city"].str.strip().str.title()
+    df["seller_state"] = df["seller_state"].str.strip().str.upper()
+
+    # Remove duplicate seller_ids
+    df = df.drop_duplicates(subset=["seller_id"])
+
+    logger.info(f"  Sellers: {len(df):,} rows cleaned")
+    return df.reset_index(drop=True)
 
 
 def clean_payments(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Clean payments:
-    - Remove zero-value rows
-    - Warn on unexpected payment_type values
+    Clean the payments dataset.
+    - Remove zero-value payments
+    - Validate payment_type enum values
     """
-    logger.info("[TRANSFORM] clean_payments start — rows: {:,}".format(len(df)))
-    df = df.copy()
+    logger.info("Cleaning payments...")
+    original_count = len(df)
 
-    before = len(df)
+    # Remove zero or negative payment values
     df = df[df["payment_value"] > 0]
-    logger.info(f"[TRANSFORM] clean_payments: removed {before - len(df):,} zero-value rows")
 
+    # Validate payment type
     valid_types = {"credit_card", "boleto", "voucher", "debit_card", "not_defined"}
     invalid_mask = ~df["payment_type"].isin(valid_types)
-    if invalid_mask.any():
-        logger.warning(
-            f"[TRANSFORM] {invalid_mask.sum():,} rows with unexpected payment_type: "
-            f"{df.loc[invalid_mask, 'payment_type'].unique()}"
-        )
+    if invalid_mask.sum() > 0:
+        logger.warning(f"  Found {invalid_mask.sum()} rows with unexpected payment_type values")
 
-    logger.info("[TRANSFORM] clean_payments done — rows: {:,}".format(len(df)))
+    logger.info(f"  Payments: {original_count:,} -> {len(df):,} rows after cleaning")
+    return df.reset_index(drop=True)
+
+
+def clean_reviews(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Clean the reviews dataset.
+    - Keep only valid review scores (1-5)
+    - Drop duplicates
+    """
+    logger.info("Cleaning reviews...")
+    original_count = len(df)
+
+    # Filter to valid review scores
+    df = df[df["review_score"].between(1, 5)]
+
+    # Keep only the latest review per order
+    df = df.sort_values("review_answer_timestamp").drop_duplicates(
+        subset=["order_id"], keep="last"
+    )
+
+    logger.info(f"  Reviews: {original_count:,} -> {len(df):,} rows after cleaning")
+    return df.reset_index(drop=True)
+
+
+def enrich_orders(
+    orders: pd.DataFrame,
+    order_items: pd.DataFrame,
+    payments: pd.DataFrame,
+) -> pd.DataFrame:
+    """
+    Enrich orders with calculated fields:
+    - delivery_days: actual days from purchase to delivery
+    - estimated_delivery_days: days from purchase to estimated delivery
+    - is_late: whether actual delivery was after estimated date
+    - total_order_value: sum of item prices + freight
+    - total_freight_value: sum of freight costs
+    """
+    logger.info("Enriching orders...")
+
+    df = orders.copy()
+
+    # Calculate delivery times
+    df["delivery_days"] = (
+        (df["order_delivered_customer_date"] - df["order_purchase_timestamp"])
+        .dt.total_seconds() / 86400
+    ).round(1)
+
+    df["estimated_delivery_days"] = (
+        (df["order_estimated_delivery_date"] - df["order_purchase_timestamp"])
+        .dt.total_seconds() / 86400
+    ).round(1)
+
+    # Is late flag (only for delivered orders)
+    delivered_mask = df["order_status"] == "delivered"
+    df["is_late"] = False
+    df.loc[delivered_mask, "is_late"] = (
+        df.loc[delivered_mask, "order_delivered_customer_date"]
+        > df.loc[delivered_mask, "order_estimated_delivery_date"]
+    )
+
+    # Aggregate item values per order
+    order_values = order_items.groupby("order_id").agg(
+        total_order_value=("price", "sum"),
+        total_freight_value=("freight_value", "sum"),
+        item_count=("order_item_id", "count"),
+    ).reset_index()
+
+    df = df.merge(order_values, on="order_id", how="left")
+
+    # Aggregate payment totals
+    payment_totals = payments.groupby("order_id").agg(
+        total_payment_value=("payment_value", "sum"),
+        payment_installments=("payment_installments", "max"),
+        payment_type=("payment_type", "first"),
+    ).reset_index()
+
+    df = df.merge(payment_totals, on="order_id", how="left")
+
+    logger.info(f"  Enriched orders: {len(df):,} rows")
+    return df.reset_index(drop=True)
+
+
+def build_date_dimension(start_date: str = "2016-01-01", end_date: str = "2019-12-31") -> pd.DataFrame:
+    """
+    Generate a complete date dimension table.
+    Covers the full range of the Olist dataset.
+    """
+    logger.info("Building date dimension...")
+
+    dates = pd.date_range(start=start_date, end=end_date, freq="D")
+
+    df = pd.DataFrame({
+        "full_date": dates,
+        "year": dates.year,
+        "quarter": dates.quarter,
+        "month": dates.month,
+        "month_name": dates.strftime("%B"),
+        "day": dates.day,
+        "day_of_week": dates.dayofweek,          # 0=Monday, 6=Sunday
+        "day_name": dates.strftime("%A"),
+        "week_of_year": dates.isocalendar().week.values,
+        "is_weekend": dates.dayofweek >= 5,
+        "date_key": dates.strftime("%Y%m%d").astype(int),
+    })
+
+    logger.info(f"  Date dimension: {len(df):,} rows ({start_date} to {end_date})")
     return df
 
 
-def enrich_orders(orders: pd.DataFrame, order_items: pd.DataFrame) -> pd.DataFrame:
+def transform(dataframes: dict) -> dict:
     """
-    Enrich orders with:
-    - delivery_days: days from purchase to delivery
-    - is_late: 1 if delivered after estimated date
-    - total_order_value and total_freight from order_items
+    Main transformation function.
+    Applies all cleaning and enrichment functions.
+    Returns a dictionary of transformed DataFrames.
     """
-    logger.info("[TRANSFORM] enrich_orders start")
-    orders = orders.copy()
+    logger.info("=" * 50)
+    logger.info("TRANSFORM PHASE STARTING")
+    logger.info("=" * 50)
 
-    orders["delivery_days"] = (
-        orders["order_delivered_customer_date"] - orders["order_purchase_timestamp"]
-    ).dt.days
+    transformed = {}
 
-    orders["is_late"] = (
-        orders["order_delivered_customer_date"] > orders["order_estimated_delivery_date"]
-    ).astype(int)
+    # Clean individual datasets
+    transformed["orders"] = clean_orders(dataframes["orders"])
+    transformed["customers"] = clean_customers(dataframes["customers"])
+    transformed["products"] = clean_products(dataframes["products"])
+    transformed["sellers"] = clean_sellers(dataframes["sellers"])
+    transformed["payments"] = clean_payments(dataframes["payments"])
+    transformed["reviews"] = clean_reviews(dataframes["reviews"])
+    transformed["order_items"] = dataframes["order_items"].copy()
 
-    if order_items is not None and not order_items.empty:
-        order_value = (
-            order_items
-            .groupby("order_id")
-            .agg(
-                total_order_value=("price", "sum"),
-                total_freight=("freight_value", "sum")
-            )
-            .reset_index()
-        )
-        orders = orders.merge(order_value, on="order_id", how="left")
-    else:
-        orders["total_order_value"] = np.nan
-        orders["total_freight"] = np.nan
+    # Enrich orders with calculated fields
+    transformed["orders_enriched"] = enrich_orders(
+        transformed["orders"],
+        transformed["order_items"],
+        transformed["payments"],
+    )
 
-    logger.info("[TRANSFORM] enrich_orders done — rows: {:,}".format(len(orders)))
-    return orders
+    # Build date dimension
+    transformed["dim_date"] = build_date_dimension()
+
+    logger.info(f"\nTransformation complete. {len(transformed)} datasets ready.")
+    return transformed
 
 
-def build_date_dimension(start: str = "2016-01-01", end: str = "2019-12-31") -> pd.DataFrame:
-    """
-    Generate a dim_date table for the full dataset date range.
-    Returns columns: date_key, full_date, year, quarter, month,
-                     month_name, day_of_week, day_name, is_weekend
-    """
-    logger.info(f"[TRANSFORM] build_date_dimension: {start} to {end}")
-    dates = pd.date_range(start=start, end=end, freq="D")
-    df = pd.DataFrame({"full_date": dates})
-
-    df["date_key"]    = df["full_date"].dt.strftime("%Y%m%d").astype(int)
-    df["year"]        = df["full_date"].dt.year
-    df["quarter"]     = df["full_date"].dt.quarter
-    df["month"]       = df["full_date"].dt.month
-    df["month_name"]  = df["full_date"].dt.strftime("%B")
-    df["day_of_week"] = df["full_date"].dt.dayofweek
-    df["day_name"]    = df["full_date"].dt.strftime("%A")
-    df["is_weekend"]  = (df["day_of_week"] >= 5).astype(int)
-
-    logger.info(f"[TRANSFORM] build_date_dimension done — {len(df):,} rows")
-    return df
+if __name__ == "__main__":
+    from extract import extract
+    raw = extract()
+    clean = transform(raw)
+    for name, df in clean.items():
+        print(f"{name}: {df.shape}")

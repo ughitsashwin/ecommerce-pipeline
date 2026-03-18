@@ -1,0 +1,71 @@
+2026-03-18 01:08:44,657 [INFO] ============================================================
+2026-03-18 01:08:44,657 [INFO] E-COMMERCE DATA PIPELINE STARTING
+2026-03-18 01:08:44,657 [INFO] Mode: DRY RUN
+2026-03-18 01:08:44,657 [INFO] Phase: ALL
+2026-03-18 01:08:44,657 [INFO] Started at: 2026-03-18 01:08:44
+2026-03-18 01:08:44,657 [INFO] ============================================================
+2026-03-18 01:08:45,171 [INFO] 
+--- PHASE 1: EXTRACT ---
+2026-03-18 01:08:45,171 [INFO] ==================================================
+2026-03-18 01:08:45,171 [INFO] EXTRACT PHASE STARTING
+2026-03-18 01:08:45,171 [INFO] ==================================================
+2026-03-18 01:08:45,171 [INFO] Reading orders from data/raw/olist_orders_dataset.csv...
+2026-03-18 01:08:45,440 [INFO]   -> 99,441 rows loaded
+2026-03-18 01:08:45,440 [INFO] Reading order_items from data/raw/olist_order_items_dataset.csv...
+2026-03-18 01:08:45,586 [INFO]   -> 112,650 rows loaded
+2026-03-18 01:08:45,586 [INFO] Reading customers from data/raw/olist_customers_dataset.csv...
+2026-03-18 01:08:45,673 [INFO]   -> 99,441 rows loaded
+2026-03-18 01:08:45,674 [INFO] Reading products from data/raw/olist_products_dataset.csv...
+2026-03-18 01:08:45,698 [INFO]   -> 32,951 rows loaded
+2026-03-18 01:08:45,698 [INFO] Reading sellers from data/raw/olist_sellers_dataset.csv...
+2026-03-18 01:08:45,701 [INFO]   -> 3,095 rows loaded
+2026-03-18 01:08:45,701 [INFO] Reading payments from data/raw/olist_order_payments_dataset.csv...
+2026-03-18 01:08:45,750 [INFO]   -> 103,886 rows loaded
+2026-03-18 01:08:45,750 [INFO] Reading reviews from data/raw/olist_order_reviews_dataset.csv...
+2026-03-18 01:08:45,946 [INFO]   -> 99,224 rows loaded
+2026-03-18 01:08:45,947 [INFO] Reading geolocation from data/raw/olist_geolocation_dataset.csv...
+2026-03-18 01:08:46,349 [INFO]   -> 1,000,163 rows loaded
+2026-03-18 01:08:46,350 [INFO] 
+Extraction complete. 8 datasets loaded.
+2026-03-18 01:08:46,350 [INFO]   OK orders: 99,441 rows (as expected)
+2026-03-18 01:08:46,350 [INFO]   OK order_items: 112,650 rows (as expected)
+2026-03-18 01:08:46,350 [INFO]   OK customers: 99,441 rows (as expected)
+2026-03-18 01:08:46,350 [INFO]   OK products: 32,951 rows (as expected)
+2026-03-18 01:08:46,350 [INFO]   OK sellers: 3,095 rows (as expected)
+2026-03-18 01:08:46,350 [INFO]   OK payments: 103,886 rows (as expected)
+2026-03-18 01:08:46,350 [WARNING] Row count mismatch for 'reviews': expected 100,000, got 99,224
+2026-03-18 01:08:46,350 [INFO]   OK geolocation: 1,000,163 rows (as expected)
+2026-03-18 01:08:46,350 [INFO] Extract completed in 1.2s
+2026-03-18 01:08:46,350 [INFO] 
+--- PHASE 2: TRANSFORM ---
+2026-03-18 01:08:46,350 [INFO] ==================================================
+2026-03-18 01:08:46,350 [INFO] TRANSFORM PHASE STARTING
+2026-03-18 01:08:46,350 [INFO] ==================================================
+2026-03-18 01:08:46,350 [INFO] Cleaning orders...
+2026-03-18 01:08:46,384 [INFO]   Orders: 99,441 -> 99,441 rows after cleaning
+2026-03-18 01:08:46,385 [INFO] Cleaning customers...
+2026-03-18 01:08:46,437 [INFO]   Customers: 99,441 -> 99,441 rows after cleaning
+2026-03-18 01:08:46,437 [INFO] Cleaning products...
+2026-03-18 01:08:46,441 [INFO]   Products: 32,951 rows cleaned
+2026-03-18 01:08:46,441 [INFO] Cleaning sellers...
+2026-03-18 01:08:46,443 [INFO]   Sellers: 3,095 rows cleaned
+2026-03-18 01:08:46,443 [INFO] Cleaning payments...
+2026-03-18 01:08:46,452 [INFO]   Payments: 103,886 -> 103,877 rows after cleaning
+2026-03-18 01:08:46,452 [INFO] Cleaning reviews...
+2026-03-18 01:08:46,495 [INFO]   Reviews: 99,224 -> 98,673 rows after cleaning
+2026-03-18 01:08:46,507 [INFO] Enriching orders...
+2026-03-18 01:08:46,733 [INFO]   Enriched orders: 99,441 rows
+2026-03-18 01:08:46,735 [INFO] Building date dimension...
+2026-03-18 01:08:46,749 [INFO]   Date dimension: 1,461 rows (2016-01-01 to 2019-12-31)
+2026-03-18 01:08:46,749 [INFO] 
+Transformation complete. 9 datasets ready.
+2026-03-18 01:08:46,749 [INFO] Transform completed in 0.4s
+2026-03-18 01:08:46,749 [INFO] 
+--- PHASE 3: LOAD ---
+2026-03-18 01:08:46,749 [INFO] DRY RUN MODE — skipping database load
+2026-03-18 01:08:46,749 [INFO] Dry run completed in 0.0s (no data written)
+2026-03-18 01:08:46,749 [INFO] 
+============================================================
+2026-03-18 01:08:46,749 [INFO] PIPELINE COMPLETE
+2026-03-18 01:08:46,749 [INFO] Total runtime: 2.1s (0.0 min)
+2026-03-18 01:08:46,749 [INFO] ============================================================
